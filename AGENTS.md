@@ -28,3 +28,8 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+
+- The kiosk welcome screen lives at `/` (src/routes/index.tsx); reusable kiosk pieces go in src/components/kiosk/. Why: keeps the single-screen kiosk easy to find.
+- Neon/glass visual styles are defined as component classes in src/styles.css (glass-card, seg-tab, btn-start, etc.), never ad hoc colors in components. Why: one place to tune the theme.
