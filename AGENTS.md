@@ -33,3 +33,6 @@ use the editor.
 
 - The kiosk welcome screen lives at `/` (src/routes/index.tsx); reusable kiosk pieces go in src/components/kiosk/. Why: keeps the single-screen kiosk easy to find.
 - Neon/glass visual styles are defined as component classes in src/styles.css (glass-card, seg-tab, btn-start, etc.), never ad hoc colors in components. Why: one place to tune the theme.
+- Kiosk backend logic lives in src/lib/kiosk.functions.ts as public server functions using the admin client inside handlers; kiosk tables have RLS on with no browser policies. Why: the PC screen has no sign-in, so all access goes through validated server code.
+- Shared kiosk rules (durations, PC id, formatting) live in browser-safe src/lib/kiosk.ts with tests in src/lib/kiosk.test.ts. Why: one source for screen, phone page and server.
+- The kiosk screen renders a fixed 1600x900 canvas scaled to the window via KioskStage. Why: pixel-identical layout on any display with no scrolling.
