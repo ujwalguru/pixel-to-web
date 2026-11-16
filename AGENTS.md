@@ -36,3 +36,4 @@ use the editor.
 - Kiosk backend logic lives in src/lib/kiosk.functions.ts as public server functions using the admin client inside handlers; kiosk tables have RLS on with no browser policies. Why: the PC screen has no sign-in, so all access goes through validated server code.
 - Shared kiosk rules (durations, PC id, formatting) live in browser-safe src/lib/kiosk.ts with tests in src/lib/kiosk.test.ts. Why: one source for screen, phone page and server.
 - The kiosk screen renders a fixed 1600x900 canvas scaled to the window via KioskStage. Why: pixel-identical layout on any display with no scrolling.
+- Per-PC settings (terminal name, launcher closed) live in that machine's localStorage; the staff PIN is a single hashed row checked only by server functions. Why: each kiosk is its own device, while the PIN must never reach the browser.

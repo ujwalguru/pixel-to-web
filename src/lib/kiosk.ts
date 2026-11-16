@@ -45,3 +45,16 @@ export function normalizeBookingCode(raw: string): string {
 export function escapeLike(raw: string): string {
   return raw.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
+
+export const TERMINAL_STORAGE_KEY = "airavoto.terminal";
+
+/** Staff PIN: 4 to 8 digits. */
+export function isValidPin(pin: string): boolean {
+  return /^\d{4,8}$/.test(pin);
+}
+
+/** Terminal name shown on screen, e.g. "PC 269": 1–20 visible characters. */
+export function normalizeTerminalName(raw: string): string | null {
+  const name = raw.trim().replace(/\s+/g, " ");
+  return name.length >= 1 && name.length <= 20 ? name : null;
+}

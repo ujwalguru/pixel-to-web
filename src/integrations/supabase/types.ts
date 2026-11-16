@@ -41,6 +41,24 @@ export type Database = {
         }
         Relationships: []
       }
+      kiosk_staff: {
+        Row: {
+          id: number
+          pin_hash: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          pin_hash: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          pin_hash?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       members: {
         Row: {
           created_at: string

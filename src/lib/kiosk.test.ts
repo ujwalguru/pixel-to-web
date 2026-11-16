@@ -18,3 +18,23 @@ describe("kiosk rules", () => {
     expect(normalizeBookingCode(" air-1001 ")).toBe("AIR-1001");
   });
 });
+
+import { isValidPin, normalizeTerminalName } from "./kiosk";
+
+describe("staff settings rules", () => {
+  it("accepts a 4-digit staff PIN", () => {
+    expect(isValidPin("1234")).toBe(true);
+  });
+  it("rejects a staff PIN shorter than 4 digits", () => {
+    expect(isValidPin("123")).toBe(false);
+  });
+  it("rejects a staff PIN with letters", () => {
+    expect(isValidPin("12ab")).toBe(false);
+  });
+  it("rejects an empty terminal name", () => {
+    expect(normalizeTerminalName("   ")).toBeNull();
+  });
+  it("tidies spaces in a terminal name", () => {
+    expect(normalizeTerminalName("  PC   12 ")).toBe("PC 12");
+  });
+});

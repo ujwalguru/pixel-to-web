@@ -270,3 +270,51 @@ export const claimPairing = createServerFn({ method: "POST" })
     }
     return { ok: true, value: toDto(row) };
   });
+
+// ---- Staff PIN (protects the Settings pop-up) ----
+
+const pinSchema = z.string().regex(/^\d{4,8}$/);
+
+async function hashPin(pin: string): Promise<string> {
+  const bytes = new TextEncoder().encode(`airavoto-pin:${pin}`);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export const verifyStaffPin = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => z.object({ pin: pinSchema }).parse(input))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row } = await supabaseAdmin
+      .from("kiosk_staff")
+      .select("pin_hash")
+      .eq("id", 1)
+      .maybeSingle();
+    if (!row) return { ok: false };
+    // Small delay slows down guessing.
+    await new Promise((r) => setTimeout(r, 400));
+    return { ok: row.pin_hash === (await hashPin(data.pin)) };
+  });
+
+export const changeStaffPin = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z.object({ currentPin: pinSchema, newPin: pinSchema }).parse(input),
+  )
+  .handler(async ({ data }): Promise<Result<true>> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: updated, error } = await supabaseAdmin
+      .from("kiosk_staff")
+      .update({ pin_hash: await hashPin(data.newPin), updated_at: new Date().toISOString() })
+      .eq("id", 1)
+      .eq("pin_hash", await hashPin(data.currentPin))
+      .select("id")
+      .maybeSingle();
+    if (error) {
+      console.error("changeStaffPin", error);
+      return { ok: false, error: "Could not change the PIN. Please try again." };
+    }
+    if (!updated) return { ok: false, error: "Current PIN is wrong." };
+    return { ok: true, value: true };
+  });

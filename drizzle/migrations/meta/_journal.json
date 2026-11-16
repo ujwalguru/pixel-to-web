@@ -8,6 +8,13 @@
       "when": 1794805994212,
       "tag": "0000_kiosk_members_bookings_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794806432902,
+      "tag": "0001_kiosk_staff_pin",
+      "breakpoints": true
     }
   ]
 }

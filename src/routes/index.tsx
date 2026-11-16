@@ -11,6 +11,7 @@ import {
   Loader2,
   Monitor,
   Play,
+  Power,
   ScanLine,
   Settings,
   Square,
@@ -22,9 +23,10 @@ import bg from "@/assets/neon_lattice_background.png.asset.json";
 import { AiravotoMark } from "@/components/kiosk/AiravotoMark";
 import { KioskStage } from "@/components/kiosk/KioskStage";
 import { DurationPicker } from "@/components/kiosk/DurationPicker";
+import { SettingsDialog } from "@/components/kiosk/SettingsDialog";
+import { useTerminalId } from "@/hooks/use-terminal-id";
 import {
   DEFAULT_DURATION,
-  PC_ID,
   QR_REFRESH_MS,
   formatDuration,
   type ActiveSession,
@@ -63,6 +65,8 @@ const MODE_UI: { id: Mode; label: string; icon: typeof User; placeholder: string
   { id: "username", label: "Username", icon: UserRound, placeholder: "Enter your username" },
 ];
 
+const LAUNCHER_CLOSED_KEY = "airavoto.launcherClosed";
+
 function useNow() {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -75,17 +79,46 @@ function useNow() {
 
 function Index() {
   const now = useNow();
+  const queryClient = useQueryClient();
+  const [pcId, savePcId] = useTerminalId();
   const getActiveFn = useServerFn(getActiveSession);
+  const endFn = useServerFn(endSession);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [launcherClosed, setLauncherClosedState] = useState(false);
+  // Remember a closed launcher on this PC so a page refresh doesn't reopen it.
+  useEffect(() => {
+    setLauncherClosedState(window.localStorage.getItem(LAUNCHER_CLOSED_KEY) === "1");
+  }, []);
+  const setLauncherClosed = (closed: boolean) => {
+    window.localStorage.setItem(LAUNCHER_CLOSED_KEY, closed ? "1" : "0");
+    setLauncherClosedState(closed);
+  };
 
   const sessionQuery = useQuery({
-    queryKey: ["active-session", PC_ID],
-    queryFn: () => getActiveFn({ data: { pcId: PC_ID } }),
+    queryKey: ["active-session", pcId],
+    queryFn: () => getActiveFn({ data: { pcId: pcId! } }),
+    enabled: Boolean(pcId) && !launcherClosed,
     refetchInterval: 3000,
   });
 
   const session = sessionQuery.data ?? null;
   const expired = session && now && new Date(session.endsAt).getTime() <= now.getTime();
   const active = session && !expired ? session : null;
+
+  const endLauncher = async () => {
+    if (active) {
+      try {
+        await endFn({ data: { pcId: active.pcId, sessionId: active.id } });
+      } catch {
+        toast.error("Could not end the session.");
+        throw new Error("end failed");
+      }
+    }
+    queryClient.setQueryData(["active-session", pcId], null);
+    setLauncherClosed(true);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    toast.success("Launcher closed.");
+  };
 
   const time = now
     ? now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
@@ -112,12 +145,13 @@ function Index() {
             <div className="glass-pill flex items-center gap-2 rounded-full p-1.5">
               <div className="flex items-center gap-2.5 rounded-full px-4 py-2 text-foreground">
                 <Monitor className="h-6 w-6" strokeWidth={1.75} />
-                <span className="text-xl font-medium">{PC_ID}</span>
+                <span className="text-xl font-medium">{pcId ?? "…"}</span>
               </div>
               <div className="glass-pill flex items-center gap-3 rounded-full py-1.5 pl-1.5 pr-5">
                 <button
                   type="button"
                   aria-label="Settings"
+                  onClick={() => setSettingsOpen(true)}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-foreground transition-colors hover:bg-accent"
                 >
                   <Settings className="h-5 w-5" />
@@ -127,18 +161,62 @@ function Index() {
             </div>
           </header>
 
-          {active && now ? (
+          {launcherClosed ? (
+            <LauncherClosedView onOpen={() => setSettingsOpen(true)} />
+          ) : active && now ? (
             <ActiveSessionView session={active} now={now} />
-          ) : (
-            <WelcomeView />
-          )}
+          ) : pcId ? (
+            <WelcomeView pcId={pcId} />
+          ) : null}
         </div>
       </KioskStage>
+      {pcId && (
+        <SettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          purpose={launcherClosed ? "reopen" : "settings"}
+          pcId={pcId}
+          hasActiveSession={Boolean(active)}
+          onSaveName={savePcId}
+          onEndLauncher={endLauncher}
+          onReopen={() => {
+            setLauncherClosed(false);
+            toast.success("Launcher is open.");
+          }}
+        />
+      )}
     </main>
   );
 }
 
-function WelcomeView() {
+function LauncherClosedView({ onOpen }: { onOpen: () => void }) {
+  return (
+    <section className="flex flex-1 flex-col items-center justify-center pb-16">
+      <div className="glass-card flex w-[560px] flex-col items-center rounded-[28px] px-12 py-12 text-center">
+        <div className="btn-danger flex h-20 w-20 items-center justify-center rounded-full text-primary-foreground">
+          <Power className="h-10 w-10" />
+        </div>
+        <h1 className="mt-6 text-[40px] font-semibold tracking-tight text-foreground">
+          Launcher closed
+        </h1>
+        <p className="mt-2 text-lg text-muted-foreground">
+          This PC isn't taking new sessions right now.
+        </p>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="btn-start mt-10 flex items-center gap-2 rounded-full px-10 py-3.5 text-lg font-semibold text-primary-foreground"
+        >
+          <Play className="h-5 w-5 fill-current" />
+          Open launcher
+        </button>
+        <p className="mt-4 text-sm text-muted-foreground">Staff PIN required</p>
+      </div>
+    </section>
+  );
+}
+
+function WelcomeView({ pcId }: { pcId: string }) {
   return (
     <>
       <section className="mt-14 text-center">
@@ -148,21 +226,21 @@ function WelcomeView() {
         <p className="mt-4 text-2xl text-muted-foreground">Choose how to start playing</p>
       </section>
       <section className="mx-auto mt-8 grid w-[1000px] grid-cols-2 gap-7">
-        <ScanCard />
-        <AccessCodeCard />
+        <ScanCard pcId={pcId} />
+        <AccessCodeCard pcId={pcId} />
       </section>
     </>
   );
 }
 
-function ScanCard() {
+function ScanCard({ pcId }: { pcId: string }) {
   const createPairingFn = useServerFn(createPairing);
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
 
   const pairing = useQuery({
-    queryKey: ["pairing", PC_ID],
-    queryFn: () => createPairingFn({ data: { pcId: PC_ID } }),
+    queryKey: ["pairing", pcId],
+    queryFn: () => createPairingFn({ data: { pcId } }),
     refetchInterval: QR_REFRESH_MS,
     refetchOnWindowFocus: false,
     staleTime: QR_REFRESH_MS,
@@ -204,7 +282,7 @@ function ScanCard() {
   );
 }
 
-function AccessCodeCard() {
+function AccessCodeCard({ pcId }: { pcId: string }) {
   const queryClient = useQueryClient();
   const startFn = useServerFn(startSession);
   const [mode, setMode] = useState<Mode>("member");
@@ -215,7 +293,7 @@ function AccessCodeCard() {
 
   const mutation = useMutation({
     mutationFn: () =>
-      startFn({ data: { pcId: PC_ID, mode, value: value.trim(), durationSeconds: duration } }),
+      startFn({ data: { pcId, mode, value: value.trim(), durationSeconds: duration } }),
     onSuccess: (res) => {
       if (!res.ok) {
         toast.error(res.error);
@@ -223,7 +301,7 @@ function AccessCodeCard() {
       }
       toast.success(`Welcome ${res.value.playerName}! Enjoy your game.`);
       setValue("");
-      queryClient.setQueryData(["active-session", PC_ID], res.value);
+      queryClient.setQueryData(["active-session", pcId], res.value);
     },
     onError: () => toast.error("Could not reach the server. Please try again."),
   });
@@ -239,7 +317,8 @@ function AccessCodeCard() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Enter") start();
+      // Ignore Enter while a pop-up (e.g. Settings) is open.
+      if (e.key === "Enter" && !document.querySelector('[role="dialog"]')) start();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -332,8 +411,8 @@ function ActiveSessionView({ session, now }: { session: ActiveSession; now: Date
     mutationFn: () => endFn({ data: { pcId: session.pcId, sessionId: session.id } }),
     onSuccess: () => {
       toast.success("Session ended. Thanks for playing!");
-      queryClient.setQueryData(["active-session", PC_ID], null);
-      queryClient.invalidateQueries({ queryKey: ["pairing", PC_ID] });
+      queryClient.setQueryData(["active-session", session.pcId], null);
+      queryClient.invalidateQueries({ queryKey: ["pairing", session.pcId] });
     },
     onError: () => toast.error("Could not end the session. Please try again."),
   });
